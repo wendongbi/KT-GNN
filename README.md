@@ -1,5 +1,5 @@
 # KTGNN
-Source code and datasets (twitter) of KTGNN.
+Source code and datasets of the paper "Predicting the Silent Majority on Graphs: Knowledge Transferable Graph " (WWW2023) [[PDF]](https://arxiv.org/abs/2302.00873)
 
 <img src="model_archtecture.png" style="zoom:75%;" />
 
