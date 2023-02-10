@@ -127,6 +127,7 @@ def main(data, save=False, repeat=3, num_epoch=200, gnn='KTGNN', seed=None, \
         data_split_seed = 0
         model_init_seed = train_id - 1
         if seed is not None:
+            data_split_seed = seed
             model_init_seed = seed
 
         set_random_seed(model_init_seed)
