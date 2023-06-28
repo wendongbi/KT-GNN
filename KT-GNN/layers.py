@@ -92,7 +92,6 @@ class Adapted_complete_layer(MessagePassing):
         # support = torch.cat((x_src[:, :self.dim_share], deltaX.unsqueeze(0).expand((N, self.dim_share))), dim=1)
         adapted_domain_diff = self.lin_diff(domain_diff.unsqueeze(0)) # dim_share -> 1 * dim_unshare
         support = self.lin_g(torch.cat((x_u, adapted_domain_diff.expand((N, self.dim_unshare))), dim=1))
-        # support = support * adapted_domain_diff
         if activation is None:
             domain_shift = support
         elif activation == 'relu':

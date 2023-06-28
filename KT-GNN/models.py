@@ -32,7 +32,7 @@ from layers import Adapted_complete_layer, AdaptedConv
 
 
 class Adapted_complementor(nn.Module):
-    def __init__(self, dim_o, dim_u, hidden_o=128, hidden_u=128, step=2, use_dist_loss=False, use_complement=True):
+    def __init__(self, dim_o, dim_u, hidden_o=128, hidden_u=128, step=2, use_dist_loss=False):
         super(Adapted_complementor, self).__init__()
         self.dim_o = dim_o
         self.dim_u = dim_u
@@ -41,23 +41,20 @@ class Adapted_complementor(nn.Module):
         self.step = step
         self.input_layer_o = Linear(dim_o, hidden_o, bias=False)
         self.input_layer_u = Linear(dim_u, hidden_u, bias=False)
-        self.use_complement = use_complement
-        if use_complement:
-            self.adapted_layer = Adapted_complete_layer(hidden_o, hidden_u, adapted=True, bias=False)
-            self.use_dist_loss = use_dist_loss
-            self.layers = nn.ModuleList()
-            for _ in range(step-1):
-                self.layers.append(Adapted_complete_layer(hidden_o, hidden_u, adapted=False, bias=False))
+        self.adapted_layer = Adapted_complete_layer(hidden_o, hidden_u, adapted=True, bias=False)
+        self.use_dist_loss = use_dist_loss
+        self.layers = nn.ModuleList()
+        for _ in range(step-1):
+            self.layers.append(Adapted_complete_layer(hidden_o, hidden_u, adapted=False, bias=False))
         self.graph_partitioned = None
         self.reset_parameters()
 
     def reset_parameters(self):
         self.input_layer_u.reset_parameters()
         self.input_layer_o.reset_parameters()
-        if self.use_complement:
-            self.adapted_layer.reset_parameters()
-            for layer in self.layers:
-                layer.reset_parameters()
+        self.adapted_layer.reset_parameters()
+        for layer in self.layers:
+            layer.reset_parameters()
     
     def prepare_graph(self, data, step=2):
         edge_index = data.edge_index
@@ -91,17 +88,21 @@ class Adapted_complementor(nn.Module):
             self.graph_partitioned = self.prepare_graph(data, step=self.step)
         x_o = self.input_layer_o(data.x[:, :self.dim_o])
         x_u = self.input_layer_u(data.x[:, self.dim_o:])
-        if not self.use_complement:
-            return torch.cat((x_o, x_u), dim=1), None
         deltaX = x_o[data.central_mask].mean(0) - x_o[~data.central_mask].mean(0)
         x_u_hat, adapted_domain_diff = self.adapted_layer(x_o, x_u, self.graph_partitioned[0][0], deltaX, data.central_mask)
+        x_u += x_u_hat # x_hat[data.central_mask] all equals to zero, becuase of the aggregation mechanism of the pyTorch function
+        
+        # print((x_u[~data.central_mask].sum(1) == 0).sum(), (x_u[data.central_mask].sum(1) == 0).sum())
+        for idx, layer in enumerate(self.layers):
+            x_u_hat, _ = layer(x_o, x_u, self.graph_partitioned[idx+1][0]) # change data.edge_index further
+            x_u += x_u_hat # x_hat[data.central_mask] all equals to zero, becuase of the aggregation mechanism of the pyTorch function
+            # print((x_u[~data.central_mask].sum(1) == 0).sum(), (x_u[data.central_mask].sum(1) == 0).sum())
         if self.training and self.use_dist_loss:
             loss_dist = self.distribution_loss(adapted_domain_diff, x_u_hat, data.central_mask, self.graph_partitioned[0][2])
         else:
             loss_dist = None
-        for idx, layer in enumerate(self.layers):
-            x_u_hat, _ = layer(x_o, x_u_hat, self.graph_partitioned[idx+1][0]) # change data.edge_index further
-        return torch.cat((x_o, x_u*data.central_mask.unsqueeze(1) + x_u_hat* (~data.central_mask).unsqueeze(1)), dim=1), loss_dist
+        # return torch.cat((x_o, x_u*data.central_mask.unsqueeze(1) + x_u_hat* (~data.central_mask).unsqueeze(1)), dim=1), loss_dist
+        return torch.cat((x_o, x_u), dim=1), loss_dist
 
 
 class KTGNN(torch.nn.Module):
